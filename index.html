@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <meta name="theme-color" content="#1a1a1a" />
-<title>Survey Tracker</title>
+<title>Building Tracker</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -20,9 +20,9 @@
   }
   .stat { display: flex; align-items: center; gap: 8px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-  .dot.green  { background: #22c55e; }
-  .dot.red    { background: #ef4444; }
-  .dot.yellow { background: #eab308; }
+  .dot.blue   { background: #2563eb; }
+  .dot.green  { background: #16a34a; }
+  .dot.orange { background: #ea580c; }
   .stat-num { font-size: 16px; font-weight: 700; line-height: 1; }
   .stat-lbl { color: #6b7280; font-size: 11px; font-weight: 500; line-height: 1.2; margin-top: 2px; }
 
@@ -77,23 +77,59 @@
     line-height: 1 !important;
   }
   .pin span { transform: rotate(45deg); display: block; }
-  .pin.surveyed { background-color: #16a34a !important; }
-  .pin.refused  { background-color: #dc2626 !important; }
-  .pin.nothome  { background-color: #ca8a04 !important; }
+  .pin.empty { background-color: #6b7280 !important; }   /* gray: no counts yet */
+  .pin.home  { background-color: #16a34a !important; }   /* green: only homes */
+  .pin.shop  { background-color: #ea580c !important; }   /* orange: only shops */
+  .pin.mixed { background-color: #7c3aed !important; }   /* purple: homes + shops */
 
-  .popup-actions { display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
-  .popup-actions button {
-    border: none; padding: 11px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
-    color: #fff; cursor: pointer; text-align: left;
-  }
-  .popup-actions .surveyed  { background: #22c55e; }
-  .popup-actions .refused   { background: #ef4444; }
-  .popup-actions .nothome   { background: #eab308; }
-  .popup-actions .delete    { background: #6b7280; margin-top: 4px; }
-  .popup-actions .cancel    { background: transparent; color: #6b7280; padding: 8px; text-align: center; }
-  .popup-title { font-weight: 700; margin-bottom: 10px; font-size: 14px; color: #1a1a1a; }
+  /* Popup styles */
   .leaflet-popup-content-wrapper { border-radius: 12px; }
-  .leaflet-popup-content { margin: 14px; }
+  .leaflet-popup-content { margin: 14px; min-width: 240px; }
+  .popup-title {
+    font-weight: 700; margin-bottom: 4px; font-size: 15px; color: #1a1a1a;
+    text-align: center;
+  }
+
+  .counter-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid #f3f4f6;
+  }
+  .counter-row:last-of-type { border-bottom: none; }
+  .counter-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 600; color: #1a1a1a;
+  }
+  .counter-icon { font-size: 18px; }
+  .counter-controls { display: flex; align-items: center; gap: 10px; }
+  .counter-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: none; cursor: pointer;
+    font-size: 20px; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; padding: 0;
+  }
+  .counter-btn.minus { background: #ef4444; }
+  .counter-btn.plus  { background: #22c55e; }
+  .counter-btn:active { transform: scale(0.92); }
+  .counter-btn.minus:disabled { background: #fca5a5; cursor: not-allowed; }
+  .counter-value {
+    font-size: 18px; font-weight: 700; min-width: 28px; text-align: center;
+    color: #1a1a1a;
+  }
+
+  .popup-summary {
+    text-align: center; font-size: 12px; color: #6b7280;
+    padding: 8px 0 10px; font-weight: 500;
+  }
+
+  .popup-actions { display: flex; flex-direction: column; gap: 6px; }
+  .popup-actions button {
+    border: none; padding: 11px 14px; border-radius: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .popup-actions .delete { background: #fee2e2; color: #b91c1c; }
+  .popup-actions .done   { background: #1a1a1a; color: #fff; }
+  .popup-actions button:active { transform: scale(0.98); }
 
   #fileInput { display: none; }
 
@@ -120,16 +156,16 @@
 
 <div class="topbar">
   <div class="stat">
+    <span class="dot blue"></span>
+    <div><div class="stat-num" id="countBuildings">0</div><div class="stat-lbl">Buildings</div></div>
+  </div>
+  <div class="stat">
     <span class="dot green"></span>
-    <div><div class="stat-num" id="countSurveyed">0</div><div class="stat-lbl">Surveyed</div></div>
+    <div><div class="stat-num" id="countHomes">0</div><div class="stat-lbl">Homes</div></div>
   </div>
   <div class="stat">
-    <span class="dot red"></span>
-    <div><div class="stat-num" id="countRefused">0</div><div class="stat-lbl">Refused</div></div>
-  </div>
-  <div class="stat">
-    <span class="dot yellow"></span>
-    <div><div class="stat-num" id="countNotHome">0</div><div class="stat-lbl">Revisit</div></div>
+    <span class="dot orange"></span>
+    <div><div class="stat-num" id="countShops">0</div><div class="stat-lbl">Shops</div></div>
   </div>
 </div>
 
@@ -159,7 +195,6 @@
   const VIEW_KEY    = 'surveyTrackerView_v1';
   const TILE_KEY    = 'surveyTrackerTile_v1';
   let pins = [];
-  let nextNumber = 1;
   const markers = {};
 
   const savedView = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
@@ -201,31 +236,65 @@
     localStorage.setItem(VIEW_KEY, JSON.stringify({ lat: c.lat, lng: c.lng, zoom: map.getZoom() }));
   });
 
+  // ---- Storage (with migration from old status-based format) ----
   function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
         const data = JSON.parse(raw);
-        pins = data.pins || [];
-        nextNumber = data.nextNumber || (pins.length + 1);
-      } catch (e) { pins = []; nextNumber = 1; }
+        pins = (data.pins || []).map(p => ({
+          id: p.id,
+          lat: p.lat,
+          lng: p.lng,
+          number: p.number,
+          homes: p.homes ?? 0,
+          shops: p.shops ?? 0,
+          timestamp: p.timestamp
+        }));
+      } catch (e) { pins = []; }
     }
   }
   function save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ pins, nextNumber }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ pins }));
   }
 
-  function makeIcon(number, status) {
+  // ---- Numbering: lowest unused positive integer ----
+  // If pins use [1,2,3,4,5,6,7] and you delete #7, the next new pin gets #7.
+  // If pins use [1,2,4,5] (gap at 3), the next new pin gets #3.
+  function getNextNumber() {
+    const used = new Set(pins.map(p => p.number));
+    let n = 1;
+    while (used.has(n)) n++;
+    return n;
+  }
+
+  // ---- Pin rendering ----
+  function pinColorClass(pin) {
+    const h = pin.homes || 0;
+    const s = pin.shops || 0;
+    if (h === 0 && s === 0) return 'empty';
+    if (h > 0  && s === 0) return 'home';
+    if (h === 0 && s > 0)  return 'shop';
+    return 'mixed';
+  }
+
+  function makeIcon(pin) {
     return L.divIcon({
       className: '',
-      html: `<div class="pin ${status}"><span>${number}</span></div>`,
+      html: `<div class="pin ${pinColorClass(pin)}"><span>${pin.number}</span></div>`,
       iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -28]
     });
   }
   function renderPin(pin) {
-    const m = L.marker([pin.lat, pin.lng], { icon: makeIcon(pin.number, pin.status) }).addTo(map);
-    m.on('click', () => openExistingPopup(pin));
+    const m = L.marker([pin.lat, pin.lng], { icon: makeIcon(pin) }).addTo(map);
+    m.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      openEditPopup(pin);
+    });
     markers[pin.id] = m;
+  }
+  function refreshPinIcon(pin) {
+    if (markers[pin.id]) markers[pin.id].setIcon(makeIcon(pin));
   }
   function renderAll() {
     Object.values(markers).forEach(m => map.removeLayer(m));
@@ -234,71 +303,102 @@
     updateCounts();
   }
   function updateCounts() {
-    const c = { surveyed: 0, refused: 0, nothome: 0 };
-    pins.forEach(p => c[p.status]++);
-    document.getElementById('countSurveyed').textContent = c.surveyed;
-    document.getElementById('countRefused').textContent  = c.refused;
-    document.getElementById('countNotHome').textContent  = c.nothome;
+    let homes = 0, shops = 0;
+    pins.forEach(p => { homes += (p.homes || 0); shops += (p.shops || 0); });
+    document.getElementById('countBuildings').textContent = pins.length;
+    document.getElementById('countHomes').textContent     = homes;
+    document.getElementById('countShops').textContent     = shops;
   }
 
-  function openNewPopup(latlng) {
+  // ---- Edit popup with +/- counters ----
+  function openEditPopup(pin) {
+    const h = pin.homes || 0, s = pin.shops || 0;
+    const total = h + s;
     const html = `
-      <div class="popup-title">Mark House #${nextNumber}</div>
+      <div class="popup-title">Building #${pin.number}</div>
+      <div class="counter-row">
+        <div class="counter-label"><span class="counter-icon">🏠</span> Homes</div>
+        <div class="counter-controls">
+          <button class="counter-btn minus" ${h === 0 ? 'disabled' : ''} onclick="changeCount('${pin.id}', 'homes', -1)">−</button>
+          <span class="counter-value" id="val-homes-${pin.id}">${h}</span>
+          <button class="counter-btn plus" onclick="changeCount('${pin.id}', 'homes', 1)">+</button>
+        </div>
+      </div>
+      <div class="counter-row">
+        <div class="counter-label"><span class="counter-icon">🏪</span> Shops</div>
+        <div class="counter-controls">
+          <button class="counter-btn minus" ${s === 0 ? 'disabled' : ''} onclick="changeCount('${pin.id}', 'shops', -1)">−</button>
+          <span class="counter-value" id="val-shops-${pin.id}">${s}</span>
+          <button class="counter-btn plus" onclick="changeCount('${pin.id}', 'shops', 1)">+</button>
+        </div>
+      </div>
+      <div class="popup-summary" id="sum-${pin.id}">Total: ${total} unit${total === 1 ? '' : 's'}</div>
       <div class="popup-actions">
-        <button class="surveyed" onclick="addPin(${latlng.lat}, ${latlng.lng}, 'surveyed')">🟢 Surveyed</button>
-        <button class="refused"  onclick="addPin(${latlng.lat}, ${latlng.lng}, 'refused')">🔴 Refused</button>
-        <button class="nothome"  onclick="addPin(${latlng.lat}, ${latlng.lng}, 'nothome')">🟡 Not Home (Revisit)</button>
-        <button class="cancel"   onclick="map.closePopup()">Cancel</button>
+        <button class="delete" onclick="deletePin('${pin.id}')">🗑 Delete building</button>
+        <button class="done" onclick="map.closePopup()">Done</button>
       </div>`;
-    L.popup({ closeButton: false }).setLatLng(latlng).setContent(html).openOn(map);
-  }
-  function openExistingPopup(pin) {
-    const html = `
-      <div class="popup-title">House #${pin.number} — change status?</div>
-      <div class="popup-actions">
-        <button class="surveyed" onclick="updatePin('${pin.id}', 'surveyed')">🟢 Surveyed</button>
-        <button class="refused"  onclick="updatePin('${pin.id}', 'refused')">🔴 Refused</button>
-        <button class="nothome"  onclick="updatePin('${pin.id}', 'nothome')">🟡 Not Home (Revisit)</button>
-        <button class="delete"   onclick="deletePin('${pin.id}')">🗑 Delete this pin</button>
-        <button class="cancel"   onclick="map.closePopup()">Cancel</button>
-      </div>`;
-    L.popup({ closeButton: false }).setLatLng([pin.lat, pin.lng]).setContent(html).openOn(map);
+    L.popup({ closeButton: false, minWidth: 260 })
+      .setLatLng([pin.lat, pin.lng])
+      .setContent(html)
+      .openOn(map);
   }
 
-  function addPin(lat, lng, status) {
+  function changeCount(id, field, delta) {
+    const pin = pins.find(p => p.id === id);
+    if (!pin) return;
+    pin[field] = Math.max(0, (pin[field] || 0) + delta);
+
+    // Update displayed count in the popup (without re-opening it)
+    const valEl = document.getElementById(`val-${field}-${id}`);
+    if (valEl) valEl.textContent = pin[field];
+
+    // Update total summary
+    const total = (pin.homes || 0) + (pin.shops || 0);
+    const sumEl = document.getElementById(`sum-${id}`);
+    if (sumEl) sumEl.textContent = `Total: ${total} unit${total === 1 ? '' : 's'}`;
+
+    // Re-enable / disable minus button when hitting zero
+    const minusBtns = document.querySelectorAll(`button.minus[onclick*="'${id}', '${field}'"]`);
+    minusBtns.forEach(btn => { btn.disabled = (pin[field] === 0); });
+
+    // Update pin color (composition may have changed)
+    refreshPinIcon(pin);
+
+    save();
+    updateCounts();
+  }
+
+  function addPinAt(lat, lng) {
     const pin = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
-      lat, lng, number: nextNumber, status,
+      lat, lng,
+      number: getNextNumber(),
+      homes: 0,
+      shops: 0,
       timestamp: new Date().toISOString()
     };
     pins.push(pin);
-    nextNumber++;
     renderPin(pin);
-    save(); updateCounts();
-    map.closePopup();
-    toast(`Saved as #${pin.number}`);
+    save();
+    updateCounts();
+    toast(`Building #${pin.number} added`);
+    openEditPopup(pin);
   }
-  function updatePin(id, status) {
+
+  function deletePin(id) {
     const pin = pins.find(p => p.id === id);
     if (!pin) return;
-    pin.status = status;
-    if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; }
-    renderPin(pin);
-    save(); updateCounts();
-    map.closePopup();
-    toast(`#${pin.number} updated`);
-  }
-  function deletePin(id) {
-    if (!confirm('Delete this pin? Other pin numbers will not change.')) return;
+    if (!confirm(`Delete Building #${pin.number}? Its number will be reused for the next new pin.`)) return;
     pins = pins.filter(p => p.id !== id);
     if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; }
     save(); updateCounts();
     map.closePopup();
-    toast('Pin deleted');
+    toast(`Building #${pin.number} deleted`);
   }
 
-  map.on('click', (e) => openNewPopup(e.latlng));
+  map.on('click', (e) => addPinAt(e.latlng.lat, e.latlng.lng));
 
+  // ---- Locate me ----
   let userMarker = null, userAccuracy = null;
   function locateMe() {
     if (!navigator.geolocation) { toast('Geolocation not supported'); return; }
@@ -321,18 +421,19 @@
     );
   }
 
+  // ---- Import / Export ----
   function exportData() {
     closeMenu();
     if (pins.length === 0) { toast('No pins to export'); return; }
-    const data = { pins, nextNumber, exportedAt: new Date().toISOString() };
+    const data = { pins, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0,10);
-    a.href = url; a.download = `survey-backup-${stamp}.json`;
+    a.href = url; a.download = `building-backup-${stamp}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast(`Exported ${pins.length} pins`);
+    toast(`Exported ${pins.length} buildings`);
   }
   function importData(event) {
     const file = event.target.files[0];
@@ -343,14 +444,20 @@
         const data = JSON.parse(e.target.result);
         if (!Array.isArray(data.pins)) throw new Error('Invalid file');
         if (pins.length > 0) {
-          if (!confirm(`Replace your current ${pins.length} pins with ${data.pins.length} pins from file?`)) {
+          if (!confirm(`Replace your current ${pins.length} buildings with ${data.pins.length} from file?`)) {
             event.target.value = ''; return;
           }
         }
-        pins = data.pins;
-        nextNumber = data.nextNumber || (pins.length + 1);
+        pins = data.pins.map(p => ({
+          id: p.id || (Date.now().toString(36) + Math.random().toString(36).slice(2,6)),
+          lat: p.lat, lng: p.lng,
+          number: p.number,
+          homes: p.homes ?? 0,
+          shops: p.shops ?? 0,
+          timestamp: p.timestamp || new Date().toISOString()
+        }));
         save(); renderAll();
-        toast(`Imported ${pins.length} pins`);
+        toast(`Imported ${pins.length} buildings`);
         closeMenu();
       } catch (err) {
         alert('Could not read file: ' + err.message);
@@ -362,13 +469,14 @@
   function clearAll() {
     closeMenu();
     if (pins.length === 0) { toast('Nothing to clear'); return; }
-    if (!confirm(`Delete ALL ${pins.length} pins? Export first if you want a backup.`)) return;
+    if (!confirm(`Delete ALL ${pins.length} buildings? Export first if you want a backup.`)) return;
     if (!confirm('Are you absolutely sure? This cannot be undone.')) return;
-    pins = []; nextNumber = 1;
+    pins = [];
     save(); renderAll();
-    toast('All pins cleared');
+    toast('All buildings cleared');
   }
 
+  // ---- Menu ----
   function toggleMenu() {
     const panel = document.getElementById('menuPanel');
     if (panel.classList.contains('show')) closeMenu();
@@ -387,6 +495,7 @@
     btn.textContent = '☰';
   }
 
+  // ---- Toast ----
   let toastTimer;
   function toast(msg) {
     const t = document.getElementById('toast');
