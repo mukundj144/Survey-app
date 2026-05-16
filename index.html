@@ -258,14 +258,10 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ pins }));
   }
 
-  // ---- Numbering: lowest unused positive integer ----
-  // If pins use [1,2,3,4,5,6,7] and you delete #7, the next new pin gets #7.
-  // If pins use [1,2,4,5] (gap at 3), the next new pin gets #3.
+  // ---- Numbering: always sequential, no gaps ----
+  // Since delete renumbers everything, next number is always count+1
   function getNextNumber() {
-    const used = new Set(pins.map(p => p.number));
-    let n = 1;
-    while (used.has(n)) n++;
-    return n;
+    return pins.length + 1;
   }
 
   // ---- Pin rendering ----
@@ -310,10 +306,23 @@
     document.getElementById('countShops').textContent     = shops;
   }
 
+  // ---- Cumulative count: total homes+shops from building #1 up to #N ----
+  function getCumulativeCounts(upToNumber) {
+    let cumHomes = 0, cumShops = 0;
+    pins.forEach(p => {
+      if (p.number <= upToNumber) {
+        cumHomes += (p.homes || 0);
+        cumShops += (p.shops || 0);
+      }
+    });
+    return { cumHomes, cumShops, cumTotal: cumHomes + cumShops };
+  }
+
   // ---- Edit popup with +/- counters ----
   function openEditPopup(pin) {
     const h = pin.homes || 0, s = pin.shops || 0;
     const total = h + s;
+    const cum = getCumulativeCounts(pin.number);
     const html = `
       <div class="popup-title">Building #${pin.number}</div>
       <div class="counter-row">
@@ -332,7 +341,10 @@
           <button class="counter-btn plus" onclick="changeCount('${pin.id}', 'shops', 1)">+</button>
         </div>
       </div>
-      <div class="popup-summary" id="sum-${pin.id}">Total: ${total} unit${total === 1 ? '' : 's'}</div>
+      <div class="popup-summary" id="sum-${pin.id}">This building: ${total} unit${total === 1 ? '' : 's'}</div>
+      <div class="popup-cumulative" id="cum-${pin.id}" style="text-align:center;font-size:13px;font-weight:700;color:#2563eb;padding:4px 0 10px;border-top:1px solid #e5e7eb;margin-top:4px;">
+        📊 Buildings #1 – #${pin.number}: ${cum.cumTotal} done (🏠 ${cum.cumHomes} + 🏪 ${cum.cumShops})
+      </div>
       <div class="popup-actions">
         <button class="delete" onclick="deletePin('${pin.id}')">🗑 Delete building</button>
         <button class="done" onclick="map.closePopup()">Done</button>
@@ -355,7 +367,12 @@
     // Update total summary
     const total = (pin.homes || 0) + (pin.shops || 0);
     const sumEl = document.getElementById(`sum-${id}`);
-    if (sumEl) sumEl.textContent = `Total: ${total} unit${total === 1 ? '' : 's'}`;
+    if (sumEl) sumEl.textContent = `This building: ${total} unit${total === 1 ? '' : 's'}`;
+
+    // Update cumulative line
+    const cum = getCumulativeCounts(pin.number);
+    const cumEl = document.getElementById(`cum-${id}`);
+    if (cumEl) cumEl.innerHTML = `📊 Buildings #1 – #${pin.number}: ${cum.cumTotal} done (🏠 ${cum.cumHomes} + 🏪 ${cum.cumShops})`;
 
     // Re-enable / disable minus button when hitting zero
     const minusBtns = document.querySelectorAll(`button.minus[onclick*="'${id}', '${field}'"]`);
@@ -388,12 +405,22 @@
   function deletePin(id) {
     const pin = pins.find(p => p.id === id);
     if (!pin) return;
-    if (!confirm(`Delete Building #${pin.number}? Its number will be reused for the next new pin.`)) return;
+    if (!confirm(`Delete Building #${pin.number}? All higher buildings will be renumbered.`)) return;
+    const deletedNum = pin.number;
     pins = pins.filter(p => p.id !== id);
     if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; }
+
+    // Renumber: shift all pins with number > deletedNum down by 1
+    pins.forEach(p => {
+      if (p.number > deletedNum) {
+        p.number--;
+        refreshPinIcon(p);
+      }
+    });
+
     save(); updateCounts();
     map.closePopup();
-    toast(`Building #${pin.number} deleted`);
+    toast(`Building #${deletedNum} deleted – renumbered`);
   }
 
   map.on('click', (e) => addPinAt(e.latlng.lat, e.latlng.lng));
